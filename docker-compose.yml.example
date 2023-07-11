@@ -1,0 +1,16 @@
+version: "3.2"
+
+services:
+  pcap-broker-remote-host:
+    image: pcap-broker:latest
+    restart: always
+    volumes:
+      # mount local user's SSH key into container
+      - ~/.ssh/id_ed25519:/root/.ssh/id_ed25519:ro 
+    ports:
+      # make the PCAP-over-IP port also available on the host on port 4200
+      - 4200:4242
+    environment:
+      # Command to SSH into remote-host and execute tcpdump and filter out it's own SSH client traffic
+      PCAP_COMMAND: ssh root@remote-host -o StrictHostKeyChecking=no 'IFACE=$$(ip route show to default | grep -Po1 "dev \K\w+") && BPF=$$(echo $$SSH_CLIENT | awk "{printf \"not (host %s and port %s and %s)\", \$$1, \$$2, \$$3;}") && tcpdump -U --immediate-mode -ni $$IFACE $$BPF -s 65535 -w -'                                 
+      LISTEN_ADDRESS: "0.0.0.0:4242"
