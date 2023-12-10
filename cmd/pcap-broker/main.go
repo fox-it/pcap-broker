@@ -59,12 +59,18 @@ var (
 	listenAddress   = flag.String("listen", "", "listen address for pcap-over-ip (eg: localhost:4242)")
 	noReverseLookup = flag.Bool("n", false, "disable reverse lookup of connecting PCAP-over-IP client IP address")
 	debug           = flag.Bool("debug", false, "enable debug logging")
+	json            = flag.Bool("json", false, "enable json logging")
 )
 
 func main() {
 	flag.Parse()
 
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+	if !*json {
+		log.Logger = log.Output(zerolog.ConsoleWriter{
+			Out:        os.Stderr,
+			TimeFormat: time.RFC3339,
+		})
+	}
 
 	if *debug {
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
