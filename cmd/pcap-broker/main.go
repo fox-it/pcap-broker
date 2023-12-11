@@ -95,6 +95,8 @@ func main() {
 	log.Debug().Str("pcapCommand", *pcapCommand).Send()
 	log.Debug().Str("listenAddress", *listenAddress).Send()
 
+	ctx, cancelFunc := signal.NotifyContext(context.Background(), os.Interrupt)
+
 	// Create connections to PcapClient map
 	connMap := map[net.Conn]PcapClient{}
 
@@ -109,7 +111,7 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to parse PCAP_COMMAND")
 	}
-	cmd := exec.Command(args[0], args[1:]...)
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	log.Debug().Strs("args", args).Send()
 
 	cmd.Stdout = wStdout
@@ -122,7 +124,14 @@ func main() {
 
 	log.Debug().Int("pid", cmd.Process.Pid).Msg("started process")
 
-	ctx, cancelFunc := signal.NotifyContext(context.Background(), os.Interrupt)
+	// close context on process exit
+	go func() {
+		err := cmd.Wait()
+		if err != nil {
+			log.Fatal().Err(err).Msg("command exited with error")
+		}
+		cancelFunc()
+	}()
 
 	// Read from process stdout pipe
 	handle, err := pcap.OpenOfflineFile(rStdout)
@@ -137,11 +146,14 @@ func main() {
 	go processPackets(ctx, packetSource, connMap)
 
 	log.Info().Msgf("PCAP-over-IP server listening on %v. press CTRL-C to exit", *listenAddress)
-	l, err := net.Listen("tcp", *listenAddress)
+
+	config := net.ListenConfig{}
+	l, err := config.Listen(ctx, "tcp", *listenAddress)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to listen")
 	}
 
+	// close listener on context cancel
 	go func() {
 		<-ctx.Done()
 		cancelFunc()
@@ -149,7 +161,6 @@ func main() {
 		if err != nil {
 			log.Err(err).Msg("failed to close listener")
 		}
-
 	}()
 
 	for {
@@ -190,11 +201,6 @@ func main() {
 	}
 
 	log.Info().Msg("PCAP-over-IP server exiting")
-
-	err = cmd.Process.Kill()
-	if err != nil {
-		log.Err(err).Msg("failed to kill process")
-	}
 
 	err = rStdout.Close()
 	if err != nil {

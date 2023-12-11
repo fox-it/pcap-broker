@@ -36,6 +36,10 @@ $ ./pcap-broker --help
 Usage of ./pcap-broker:
   -cmd string
         command to execute for pcap data (eg: tcpdump -i eth0 -n --immediate-mode -s 65535 -U -w -)
+  -debug
+        enable debug logging
+  -json
+        enable json logging
   -listen string
         listen address for pcap-over-ip (eg: localhost:4242)
   -n    disable reverse lookup of connecting PCAP-over-IP client IP address
