@@ -116,7 +116,7 @@ func main() {
 
 	cmd.Stdout = wStdout
 	cmd.Stderr = log.Logger.Hook(zerolog.HookFunc(func(e *zerolog.Event, level zerolog.Level, msg string) {
-		e.Str(zerolog.LevelFieldName, zerolog.LevelDebugValue)
+		e.Str(zerolog.LevelFieldName, zerolog.LevelTraceValue)
 	}))
 
 	err = cmd.Start()
