@@ -115,7 +115,9 @@ func main() {
 	log.Debug().Strs("args", args).Send()
 
 	cmd.Stdout = wStdout
-	cmd.Stderr = log.Logger
+	cmd.Stderr = log.Logger.Hook(zerolog.HookFunc(func(e *zerolog.Event, level zerolog.Level, msg string) {
+		e.Str(zerolog.LevelFieldName, zerolog.LevelTraceValue)
+	}))
 
 	err = cmd.Start()
 	if err != nil {
