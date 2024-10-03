@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"flag"
-	"fmt"
 	"net"
 	"os"
 	"os/exec"
@@ -25,33 +24,6 @@ type PcapClient struct {
 	writer       *pcapgo.Writer
 	totalPackets uint64
 	totalBytes   uint64
-}
-
-func lookupHostnameWithTimeout(addr net.Addr, timeout time.Duration) (string, string, error) {
-	// Extract the IP address and port from the Addr object
-	tcpAddr, ok := addr.(*net.TCPAddr)
-	if !ok {
-		return "", "", fmt.Errorf("unsupported address type: %T", addr)
-	}
-	ip := tcpAddr.IP.String()
-	port := fmt.Sprintf("%d", tcpAddr.Port)
-
-	// Create a new context with the given timeout
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	// Create a new Resolver and perform the IP lookup with the given context
-	resolver := net.Resolver{}
-	names, err := resolver.LookupAddr(ctx, ip)
-	if err != nil {
-		return "", "", err
-	}
-	if len(names) == 0 {
-		return "", "", fmt.Errorf("no hostnames found for %s", ip)
-	}
-
-	// Return the first IP address found and the original port
-	return names[0], port, nil
 }
 
 var (
@@ -174,13 +146,16 @@ func main() {
 		}
 
 		if *noReverseLookup {
-			log.Printf("PCAP-over-IP connection from %v", conn.RemoteAddr())
+			log.Info().Msgf("PCAP-over-IP connection from %v", conn.RemoteAddr())
 		} else {
-			ip, port, err := lookupHostnameWithTimeout(conn.RemoteAddr(), 100*time.Millisecond)
-			if err != nil {
-				log.Printf("PCAP-over-IP connection from %v", conn.RemoteAddr())
+			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+			defer cancel()
+			ipAddr := conn.RemoteAddr().(*net.TCPAddr).IP.String()
+			names, _ := net.DefaultResolver.LookupAddr(ctx, ipAddr)
+			if len(names) == 0 {
+				log.Info().Msgf("PCAP-over-IP connection from %v", conn.RemoteAddr())
 			} else {
-				log.Printf("PCAP-over-IP connection from %s:%s", ip, port)
+				log.Info().Msgf("PCAP-over-IP connection from %v (%v)", conn.RemoteAddr(), names[0])
 			}
 		}
 
