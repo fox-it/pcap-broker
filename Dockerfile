@@ -1,10 +1,9 @@
 FROM golang:alpine
 
-COPY . /app
+RUN apk add --no-cache make build-base libpcap-dev openssh-client tcpdump
 
 WORKDIR /app
-
-RUN apk add --no-cache make build-base libpcap-dev openssh-client tcpdump
+COPY . /app
 
 RUN go mod download
 RUN go build ./cmd/pcap-broker
