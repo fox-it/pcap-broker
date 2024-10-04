@@ -1,4 +1,4 @@
-package main
+package pcap_broker
 
 import (
 	"context"
@@ -34,7 +34,7 @@ var (
 	json            = flag.Bool("json", false, "enable json logging")
 )
 
-func main() {
+func Main() {
 	flag.Parse()
 
 	if !*json {

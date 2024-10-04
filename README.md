@@ -15,10 +15,16 @@ More information on PCAP-over-IP can be found here:
 
 ## Building
 
-To build `pcap-broker`:
+Building `pcap-broker` requires the `libpcap` development headers, on Debian you can install it with:
 
 ```shell
-$ go build ./cmd/pcap-broker
+$ apt install libpcap-dev
+```
+
+To build from source, clone this repository and run:
+
+```shell
+$ go build .
 $ ./pcap-broker --help
 ```
 
@@ -27,6 +33,13 @@ Or you can build the Docker container:
 ```shell
 $ docker build -t pcap-broker .
 $ docker run -it pcap-broker --help
+```
+
+Alternatively, install directly using `go`:
+
+```shell
+$ go install github.com/fox-it/pcap-broker@latest
+$ pcap-broker --help
 ```
 
 ## Running
