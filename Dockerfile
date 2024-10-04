@@ -6,6 +6,6 @@ WORKDIR /app
 COPY . /app
 
 RUN go mod download
-RUN go build ./cmd/pcap-broker
+RUN go build .
 
 ENTRYPOINT ["./pcap-broker"]
