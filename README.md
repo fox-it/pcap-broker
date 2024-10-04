@@ -9,7 +9,7 @@ More information on PCAP-over-IP can be found here:
 
 `pcap-broker` supports the following features:
 
- * Distributing packet data to one or more PCAP-over-IP listeners
+ * Distributing packet data to one or more PCAP-over-IP clients
  * Execute a command to capture traffic, usually `tcpdump` (expects stdout to be pcap data)
  * `pcap-broker` will exit if the capture command exits
 
@@ -90,28 +90,37 @@ One use case is to acquire PCAP from a remote machine over SSH and make this ava
 Such a use case, including an example SSH command to bootstrap this, has been documented in the `docker-compose.yml.example` file:
 
 ```yaml
-version: "3.2"
-
 services:
+
   pcap-broker-remote-host:
     image: pcap-broker:latest
+    container_name: pcap-broker-remote-host
     restart: always
     volumes:
-      # mount local user's SSH key into container
+      # Mount the private key into container that wil be used for SSH
+      # Ensure that on the `remote-host` the public key is in the /root/.ssh/authorized_keys file.
       - ~/.ssh/id_ed25519:/root/.ssh/id_ed25519:ro 
-    ports:
-      # make the PCAP-over-IP port also available on the host on port 4200
-      - 4200:4242
     environment:
-      # Command to SSH into remote-host and execute tcpdump and filter out it's own SSH client traffic
-      PCAP_COMMAND: ssh root@remote-host -o StrictHostKeyChecking=no 'IFACE=$$(ip route show to default | grep -Po1 "dev \K\w+") && BPF=$$(echo $$SSH_CLIENT | awk "{printf \"not (host %s and port %s and %s)\", \$$1, \$$2, \$$3;}") && tcpdump -U --immediate-mode -ni $$IFACE $$BPF -s 65535 -w -'                                 
+      # Command that will be executed by pcap-broker to read PCAP data.
+      # Which is to SSH into `remote-host` and run tcpdump on eth0 and write PCAP data to stdout.
+      # The `not port 22` BPF is necessary to avoid any traffic loops as the PCAP data is transferred over SSH.
+      PCAP_COMMAND: |-
+        ssh root@remote-host -oStrictHostKeyChecking=no
+        tcpdump -U --immediate-mode -ni eth0 -s 65535 -w - not port 22
+
+      # Bind on 0.0.0.0 port 4242. From within the same Docker network you can reach it using the `container_name`
+      # For example in another Docker service you can reach this pcap-broker using `pcap-broker-remote-host:4242`
       LISTEN_ADDRESS: "0.0.0.0:4242"
+    ports:
+      # This is optional, but makes the PCAP-over-IP port also available locally on the Docker host on port 4200.
+      # Handy for debugging, for example: `nc -v localhost 4200 | tcpdump -nr -`
+      - 127.0.0.1:4200:4242
 ```
 
 ## Background
 
 This tool was initially written for Attack & Defend CTF purposes but can be useful in other situations where low latency is preferred, or whenever a no-nonsense PCAP-over-IP server is needed. During the CTF that Fox-IT participated in, `pcap-broker` allowed the Blue Team to capture network data once and disseminate this to other tools that natively support PCAP-over-IP, such as:
 
-* [Arkime](https://arkime.com/)
-* [Tulip](https://github.com/OpenAttackDefenseTools/tulip) (after we did some custom patches)
-* WireShark's dumpcap and tshark
+* [Arkime](https://arkime.com/) ([docs](https://arkime.com/settings#reader-poi))
+* [Tulip](https://github.com/OpenAttackDefenseTools/tulip) ([#24](https://github.com/OpenAttackDefenseTools/tulip/pull/24))
+* WireShark's [dumpcap](https://www.wireshark.org/docs/man-pages/dumpcap.html) and [tshark](https://www.wireshark.org/docs/man-pages/tshark.html) (`-i TCP@<host>:<port>`)
