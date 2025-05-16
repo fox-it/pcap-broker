@@ -123,4 +123,7 @@ This tool was initially written for Attack & Defend CTF purposes but can be usef
 
 * [Arkime](https://arkime.com/) ([docs](https://arkime.com/settings#reader-poi))
 * [Tulip](https://github.com/OpenAttackDefenseTools/tulip) ([#24](https://github.com/OpenAttackDefenseTools/tulip/pull/24))
+* [Shovel](https://github.com/FCSC-FR/shovel)
+* [Pkappa2](https://github.com/spq/pkappa2)
 * WireShark's [dumpcap](https://www.wireshark.org/docs/man-pages/dumpcap.html) and [tshark](https://www.wireshark.org/docs/man-pages/tshark.html) (`-i TCP@<host>:<port>`)
+* Zeek's [zeek-pcapovertcp-plugin](https://github.com/emnahum/zeek-pcapovertcp-plugin)
