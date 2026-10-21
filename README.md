@@ -10,6 +10,7 @@ More information on PCAP-over-IP can be found here:
 `pcap-broker` supports the following features:
 
  * Distributing packet data to one or more PCAP-over-IP clients
+ * Per-client buffering so a slow client does not block packet capture (configurable with `-b`)
  * Execute a command to capture traffic, usually `tcpdump` (expects stdout to be pcap data)
  * `pcap-broker` will exit if the capture command exits
 
@@ -47,6 +48,8 @@ $ pcap-broker --help
 ```shell
 $ ./pcap-broker --help
 Usage of ./pcap-broker:
+  -b int
+        number of packets to buffer per client (default 1000)
   -cmd string
         command to execute for pcap data (eg: tcpdump -i eth0 -n --immediate-mode -s 65535 -U -w -)
   -debug
@@ -57,6 +60,10 @@ Usage of ./pcap-broker:
         listen address for pcap-over-ip (eg: localhost:4242)
   -n    disable reverse lookup of connecting PCAP-over-IP client IP address
 ```
+
+Each connected client has its own packet buffer (default 1000 packets). If a client cannot keep up
+and its buffer fills, packets for that client are dropped rather than blocking the capture loop.
+Use `-b` to tune the buffer size, for example `-b 5000` for burstier traffic or slower clients.
 
 Arguments can be passed via commandline:
 
