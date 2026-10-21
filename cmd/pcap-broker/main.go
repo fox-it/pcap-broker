@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"sync"
 	"time"
 
 	"github.com/google/shlex"
@@ -22,16 +23,18 @@ import (
 
 type PcapClient struct {
 	writer       *pcapgo.Writer
+	packetChan   chan gopacket.Packet
 	totalPackets uint64
 	totalBytes   uint64
 }
 
 var (
-	pcapCommand     = flag.String("cmd", "", "command to execute for pcap data (eg: tcpdump -i eth0 -n --immediate-mode -s 65535 -U -w -)")
-	listenAddress   = flag.String("listen", "", "listen address for pcap-over-ip (eg: localhost:4242)")
-	noReverseLookup = flag.Bool("n", false, "disable reverse lookup of connecting PCAP-over-IP client IP address")
-	debug           = flag.Bool("debug", false, "enable debug logging")
-	json            = flag.Bool("json", false, "enable json logging")
+	pcapCommand      = flag.String("cmd", "", "command to execute for pcap data (eg: tcpdump -i eth0 -n --immediate-mode -s 65535 -U -w -)")
+	listenAddress    = flag.String("listen", "", "listen address for pcap-over-ip (eg: localhost:4242)")
+	noReverseLookup  = flag.Bool("n", false, "disable reverse lookup of connecting PCAP-over-IP client IP address")
+	debug            = flag.Bool("debug", false, "enable debug logging")
+	json             = flag.Bool("json", false, "enable json logging")
+	packetBufferSize = flag.Int("b", 1000, "number of packets to buffer per client")
 )
 
 func Main() {
@@ -70,7 +73,8 @@ func Main() {
 	ctx, cancelFunc := signal.NotifyContext(context.Background(), os.Interrupt)
 
 	// Create connections to PcapClient map
-	connMap := map[net.Conn]PcapClient{}
+	clients := map[net.Conn]*PcapClient{}
+	var mu sync.RWMutex
 
 	// Create a pipe for the command to write to, will be read by pcap.OpenOfflineFile
 	rStdout, wStdout, err := os.Pipe()
@@ -117,7 +121,7 @@ func Main() {
 	packetSource.Lazy = true
 	packetSource.NoCopy = true
 
-	go processPackets(ctx, packetSource, connMap)
+	go processPackets(ctx, packetSource, clients, &mu)
 
 	log.Info().Msgf("PCAP-over-IP server listening on %v. press CTRL-C to exit", *listenAddress)
 
@@ -174,7 +178,16 @@ func Main() {
 		}
 
 		// add connection to map
-		connMap[conn] = PcapClient{writer: writer}
+		client := &PcapClient{
+			writer:     writer,
+			packetChan: make(chan gopacket.Packet, *packetBufferSize),
+		}
+
+		mu.Lock()
+		clients[conn] = client
+		mu.Unlock()
+
+		go handleClient(ctx, conn, client, clients, &mu)
 	}
 
 	log.Info().Msg("PCAP-over-IP server exiting")
@@ -193,7 +206,8 @@ func Main() {
 func processPackets(
 	ctx context.Context,
 	packetSource *gopacket.PacketSource,
-	connMap map[net.Conn]PcapClient,
+	clients map[net.Conn]*PcapClient,
+	mu *sync.RWMutex,
 ) {
 	for packet := range packetSource.Packets() {
 		select {
@@ -202,20 +216,39 @@ func processPackets(
 		default:
 		}
 
-		for conn, stats := range connMap {
+		mu.RLock()
+		for _, client := range clients {
+			select {
+			case client.packetChan <- packet:
+			default:
+				// Buffer full, drop packet
+			}
+		}
+		mu.RUnlock()
+	}
+}
+
+func handleClient(ctx context.Context, conn net.Conn, client *PcapClient, clients map[net.Conn]*PcapClient, mu *sync.RWMutex) {
+	defer func() {
+		mu.Lock()
+		delete(clients, conn)
+		mu.Unlock()
+		_ = conn.Close()
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case packet := <-client.packetChan:
 			ci := packet.Metadata().CaptureInfo
-			err := stats.writer.WritePacket(ci, packet.Data())
+			err := client.writer.WritePacket(ci, packet.Data())
 			if err != nil {
 				log.Err(err).Msg("failed to write packet to connection")
-				delete(connMap, conn)
-				err := conn.Close()
-				if err != nil {
-					log.Err(err).Msg("failed to close connection")
-				}
-				continue
+				return
 			}
-			stats.totalPackets += 1
-			stats.totalBytes += uint64(ci.CaptureLength)
+			client.totalPackets += 1
+			client.totalBytes += uint64(ci.CaptureLength)
 		}
 	}
 }
